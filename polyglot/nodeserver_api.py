@@ -1284,8 +1284,8 @@ class PolyglotConnector(object):
         """
         if YAML:
             if self.configfile == None:
-                self.smsg('**INFO: No custom "configfile" found in server.json. \
-                    Trying the default of config.yaml.')
+                self.smsg('**INFO: No custom "configfile" found in server.json. '
+                          'Trying the default of config.yaml.')
                 self.configfile = 'config.yaml'
             else:
                 self.smsg('**INFO: Custom config file option found in server.json: \

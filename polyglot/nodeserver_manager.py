@@ -79,7 +79,7 @@ class NodeServerManager(object):
                      config=None):
         """ starts a node server """
         # pylint: disable=broad-except
-        _LOGGER.info('Starting Node Server: %s:%s', ns_platform, nsname)
+        _LOGGER.info('Starting Node Server: {}:{}'.format(ns_platform, nsname))
         # find node server
         path = helpers.get_path(ns_platform)
         interface, mqtt_server, mqtt_port = (None,)*3
@@ -101,7 +101,7 @@ class NodeServerManager(object):
 
         try:
             configfile = definition['configfile']
-            _LOGGER.info('Config file option found in server.json: %s', configfile)
+            _LOGGER.info('Config file option found in server.json: {}'.format(configfile))
         except (IOError, ValueError, KeyError):
             _LOGGER.info('Config file option not found in server.json')
             configfile = None
@@ -110,14 +110,14 @@ class NodeServerManager(object):
             interface = definition['interface'].lower()
             if interface != 'mqtt': 
                 interface = 'Default'
-                _LOGGER.info('Using interface type ' + interface)
+                _LOGGER.info('Using interface type {}'.format(interface))
             else:
                 mqtt_server = definition['mqtt_server']
                 mqtt_port = definition['mqtt_port']
-                _LOGGER.info('Using interface type ' + interface + ' at ' + mqtt_server+ ":" + mqtt_port)
+                _LOGGER.info('Using interface type {} at {}:{}'.format(interface, mqtt_server, mqtt_port))
         except (IOError, ValueError, KeyError):
             interface = 'Default'
-            _LOGGER.info('Using interface type ' + interface)
+            _LOGGER.info('Using interface type {}'.format(interface))
 
         # get server base name
         while base in self.servers or base is None:
@@ -133,9 +133,9 @@ class NodeServerManager(object):
                                 config or {}, sandbox, configfile,
                                 interface, mqtt_server, mqtt_port)
         except Exception:
-            _LOGGER.exception('Node Server %s could not start', ns_platform)
+            _LOGGER.exception('Node Server {} could not start'.format(ns_platform))
             raise ValueError(
-                "Error starting Node Server: {}.", ns_platform)
+                "Error starting Node Server: {}.".format(ns_platform))
 
         # store server
         self.servers[base] = server
@@ -155,8 +155,8 @@ class NodeServerManager(object):
 
             if None in [ns_platform, profile_number]:
                 _LOGGER.error(
-                    'Bad Node Server configuration in config file. ' +
-                    'Node Server %d', count)
+                    'Bad Node Server configuration in config file. '
+                    'Node Server {}'.format(count))
             else:
                 try:
                     self.start_server(
@@ -199,8 +199,8 @@ class NodeServerManager(object):
             if node_server.alive:
                 node_server.kill()
                 _LOGGER.warning(
-                    'Timed out waiting for Node Server %s to quit. ' +
-                    'Terminated Node Server.', node_server.name)
+                    'Timed out waiting for Node Server {} to quit. '
+                    'Terminated Node Server.'.format(node_server.name))
 
         _LOGGER.info('Unloaded Node Servers')
 
@@ -216,8 +216,8 @@ class NodeServer(object):
         if nstype in SERVER_TYPES:
             cmd = copy.deepcopy(SERVER_TYPES[nstype])
         else:
-            _LOGGER.error("Unrecognized server type %s for %s", nstype,
-                          ns_platform)
+            _LOGGER.error("Unrecognized server type {} for {}"
+                          .format(nstype, ns_platform))
             raise TypeError('bad server type')
         cmd.append(nsexe)
 
@@ -226,6 +226,7 @@ class NodeServer(object):
         self.config = config
         self.configfile = configfile
         self._cmd = cmd
+        self._threads = {}
         self.platform = ns_platform
         self.profile_number = profile_number
         self.type = nstype
@@ -237,7 +238,7 @@ class NodeServer(object):
         self.mqtt_server = mqtt_server
         self.mqtt_port = mqtt_port
         self.node_connected = False
-        self.pgver =  PGVERSION
+        self.pgver = PGVERSION
         self.pgapiver = PGAPIVER
         self.params = {'isyver':   self.isy_version,
                        'sandbox':  self.sandbox,
@@ -301,7 +302,7 @@ class NodeServer(object):
             thread.start()
 
         # Check if MQTT interface is used for this nodeserver
-        if (self.interface == 'mqtt' and MQTT == True):
+        if self.interface == 'mqtt' and MQTT:
             """
             This sends the params and config over STDOUT before replacing it with the MQTT
             subsystem. We do this so that the mqtt config from server.json is sent to the
@@ -322,8 +323,8 @@ class NodeServer(object):
             self.send_params()        
             self.send_config()
 
-        _LOGGER.info('Started Node Server: %s:%s (%s)',
-                     self.platform, self.name, self._proc.pid)
+        _LOGGER.info('Started Node Server: {}:{} ({})'
+                     .format(self.platform, self.name, self._proc.pid))
 
     def restart(self):
         """ restart the nodeserver """
@@ -341,7 +342,7 @@ class NodeServer(object):
 
     @property
     def definition(self):
-        """ Return the server defintion from server.json """
+        """ Return the server definition from server.json """
         def_file = os.path.join(self.path, 'server.json')
         instruct_file = os.path.join(self.path, 'instructions.txt')
         definition = json.loads(open(def_file).read())
@@ -372,28 +373,28 @@ class NodeServer(object):
             # node server has not been pinged
             self.send_ping()
             self._lastping = time.time()
-            return True
         elif time.time() - self._lastping >= 30:
             # If MQTT is not connected, assume we are trying to reconnect and don't send a ping
-            if self._mqtt is not None and (self._mqtt.connected == False or self.node_connected == False): return True
+            if self._mqtt is not None and (not self._mqtt.connected or not self.node_connected):
+                return True
             # last ping has expired (more than 30 seconds old)
             if self._lastpong and self._lastpong > self._lastping:
                 # pong was received
                 self._lastping = time.time()
                 self.send_ping()
-                return True
             else:
                 # pong was not received
                 if self._lastpong is not None:
-                    _LOGGER.warning('Node Server %s: time since last pong: %5.2f',
-                                self.name, (time.time() - self._lastpong))
+                    _LOGGER.warning('Node Server {}: time since last pong: {:.2f}'
+                                    .format(self.name, (time.time() - self._lastpong)))
                 else:
-                    _LOGGER.warning('Node Server %s: Never received a pong response.', self.name)
+                    _LOGGER.warning('Node Server {}: Never received a pong response.'
+                                    .format(self.name))
                 return False
         else:
             # ping hasn't expired, we have to assume responding
             time.sleep(.1)
-            return True
+        return True
 
     # manage IO
     def _send_in(self):
@@ -410,7 +411,7 @@ class NodeServer(object):
                     # no line in queue, check if the Node Server is responding
                     if not self.responding:
                         _LOGGER.error(
-                            'Node Server %s has stopped responding.', self.name)
+                            'Node Server {} has stopped responding.'.format(self.name))
                         self._inq = None
                         self._rqq = None
                         self._proc.kill()
@@ -422,22 +423,22 @@ class NodeServer(object):
                     except IOError:
                         # stdin pipe is broken. process is likely dead.
                         _LOGGER.error(
-                            'Node Server %s has exited unexpectedly.', self.name)
+                            'Node Server {} has exited unexpectedly.'.format(self.name))
                         self._inq = None
                         self._rqq = None
                         self._proc.kill()
                     else:
                         # line wrote successfully
-                        _LOGGER.debug('%s STDIN: %s', self.name, line)
+                        _LOGGER.debug('{} STDIN: {}'.format(self.name, line))
                         if self._inq:
                             self._inq.task_done()
                 time.sleep(.1)
         else:
-            if self.node_connected == True:
+            if self.node_connected:
                 while True and self._mqtt:
                     if not self.responding:
                         _LOGGER.error(
-                            'Node Server %s has stopped responding.', self.name)
+                            'Node Server {} has stopped responding.'.format(self.name))
                         self._rqq = None
                         self._mqtt.stop()
                         self._mqtt = None
@@ -456,10 +457,10 @@ class NodeServer(object):
 
             seq = arguments.get('seq', None)
             ts = time.time()
-            _LOGGER.debug('%8s [%d] (%5.2f) _request_handler: command=%s seq=%s',
-                          self.name,
-                          (0 if self._rqq is None else self._rqq.qsize()),
-                          0.0, command, ('' if seq is None else seq))
+            _LOGGER.debug('{:8s} [{}] ({:5.2f}) _request_handler: command={} seq={}'
+                          .format(self.name,
+                                  (0 if self._rqq is None else self._rqq.qsize()),
+                                  0.0, command, ('' if seq is None else seq)))
 
             fun = self._handlers.get(command)
             if fun:
@@ -471,10 +472,8 @@ class NodeServer(object):
             if self._rqq:
                 self._rqq.task_done()
 
-            _LOGGER.debug('%8s [%d] (%5.2f) _request_handler: completed.',
-                          self.name,
-                          (0 if self._rqq is None else self._rqq.qsize()),
-                          (time.time() - ts))
+            _LOGGER.debug('{:8s} [{}] ({:5.2f}) _request_handler: completed.'
+                          .format(self.name, (0 if self._rqq is None else self._rqq.qsize()), (time.time() - ts)))
             time.sleep(.1)
 
     def _recv_out(self, line):
@@ -482,12 +481,11 @@ class NodeServer(object):
         Process the output of the nodeserver 
         (Called from STDOUT or from message receive in MQTT) 
         """
-        type = 'STDOUT'
-        if self._mqtt is not None: type = 'MQTT'
+        nstype = 'STDOUT'
+        if self._mqtt is not None: nstype = 'MQTT'
         l = (line[:57] + '...') if len(line) > 60 else line
-        _LOGGER.debug('%8s [%d] (%5.2f) %s: %s', self.name,
-                      (0 if self._rqq is None else self._rqq.qsize()),
-                      0.0, type, l)
+        _LOGGER.debug('{:8s} [{}] ({:5.2f}) {}: {}'
+                      .format(self.name, (0 if self._rqq is None else self._rqq.qsize()), 0.0, nstype, l))
         ts = time.time()
         # parse message
         message = json.loads(line)
@@ -517,19 +515,19 @@ class NodeServer(object):
                 NSLOCK.release()
             elif op == 'ClearStatistics':
                 if self.profile_number == NSMGR:
-                    _LOGGER.info('%8s manager request: ClearStatistics', self.name)
+                    _LOGGER.info('{:8s} manager request: ClearStatistics'.format(self.name))
                     isy = self.pglot.elements.isy
                     isy.get_stats(self.profile_number, clear=True)
                 else:
-                    _LOGGER.info('%8s manager request refused: {}', self.name, op)
+                    _LOGGER.info('{:8s} manager request refused: {}'.format(self.name, op))
             elif op == 'IsyHasRestarted':
                 if self.profile_number == NSMGR:
                     # [TODO] send restart message to all other node server queues
-                    _LOGGER.info('%8s reports that ISY has restarted', self.name)
+                    _LOGGER.info('{:8s} reports that ISY has restarted'.format(self.name))
                 else:
-                    _LOGGER.info('%8s manager request refused: {}', self.name, op)
+                    _LOGGER.info('{:8s} manager request refused: {}'.format(self.name, op))
             else:
-                _LOGGER.error('%8s manager op not implemented: {}', self.name, op)
+                _LOGGER.error('{:8s} manager op not implemented: {}'.format(self.name, op))
         elif command == 'statistics':
             # manage Polyglot and network communications stats
             isy = self.pglot.elements.isy
@@ -545,11 +543,11 @@ class NodeServer(object):
             self._inq = None
             self._rqq = None
         elif command == 'connected':
-            _LOGGER.info('%8s current status is connected to the broker.', self.name)
+            _LOGGER.info('{:8s} current status is connected to the broker.'.format(self.name))
             self.node_connected = True
             self.send_ping()
         elif command == 'disconnected':
-            _LOGGER.error('%8s current status is disconnected from the broker.', self.name)
+            _LOGGER.error('{:8s} current status is disconnected from the broker.'.format(self.name))
             self.node_connected = False
 
         else:
@@ -557,11 +555,10 @@ class NodeServer(object):
             if fun and self._rqq:
                 self._rqq.put(message, True)
             else:
-                _LOGGER.error('Node Server %s delivered bad command %s',
-                              self.name, command)
-        _LOGGER.debug('%8s [%d] (%5.2f)   Done: %s', self.name,
-                      (0 if self._rqq is None else self._rqq.qsize()),
-                      (time.time() - ts), l)
+                _LOGGER.error('Node Server {} delivered bad command {}'
+                              .format(self.name, command))
+        _LOGGER.debug('{:8s} [{}] ({:5.2f})   Done: {}'
+                      .format(self.name, (0 if self._rqq is None else self._rqq.qsize()), (time.time() - ts), l))
         time.sleep(.1)
 
     def _recv_err(self, line):
@@ -569,22 +566,22 @@ class NodeServer(object):
         Process STDERR from nodeserver
         """
         if line.startswith('**INFO: '):
-            _LOGGER.info('%s: %s', self.name, line)
+            _LOGGER.info('{}: {}'.format(self.name, line))
         elif line.startswith('**DEBUG: '):
-            _LOGGER.debug('%s: %s', self.name, line)
+            _LOGGER.debug('{}: {}'.format(self.name, line))
         elif line.startswith('**WARNING: '):
-            _LOGGER.warning('%s: %s', self.name, line)
+            _LOGGER.warning('{}: {}'.format(self.name, line))
         else:
-            _LOGGER.error('%s: %s', self.name, line)
+            _LOGGER.error('{}: {}'.format(self.name, line))
         time.sleep(.1)
 
     def _mk_cmd(self, cmd_code, **kwargs):
         """ Process Output TO the nodeserver (MQTT/STDIN) """
         msg = json.dumps({cmd_code: kwargs})
         # If using mqtt, send the msg to the nodeserver over that mechanism if it is connected
-        if (self.node_connected):
+        if self.node_connected:
             self._mqtt._mqttc.publish(self._mqtt.topicOutput, str(msg), 0)
-            _LOGGER.debug('%s MQTT Publish: %s', self.name, str(msg))
+            _LOGGER.debug('{} MQTT Publish: {}'.format(self.name, str(msg)))
         # Else add the msg to the STDIN queue to send to the nodeserver processed by _send_in
         elif self._inq:
             self._inq.put(msg, True, 5)
@@ -599,9 +596,7 @@ class NodeServer(object):
 
     def send_install(self, profile_number=None):
         """ Send install command to Node Server. """
-        if not profile_number:
-            profile_number = self.profile_number
-        else:
+        if profile_number:
             self.profile_number = profile_number
             self.pglot.update_config()
         self._mk_cmd('install', profile_number=self.profile_number)
@@ -665,6 +660,7 @@ class NodeServer(object):
         except MyProcessLookupError:
             pass
 
+
 class mqttSubsystem:
     """ 
     mqttSubsystem class instantiated if interface is mqtt in server.json 
@@ -724,7 +720,7 @@ class mqttSubsystem:
         :param flags: The flags set on the connection.
         :param msg: Dictionary of MQTT received message. Uses: msg.topic, msg.qos, msg.payload
         """
-        #_LOGGER.info('MQTT Received Message: ' + msg.topic + ": QoS: " + str(msg.qos) + ": " + str(msg.payload))
+        # _LOGGER.info('MQTT Received Message: ' + msg.topic + ": QoS: " + str(msg.qos) + ": " + str(msg.payload))
         self.parent._recv_out(msg.payload)
     
     def _disconnect(self, mqttc, userdata, rc):
@@ -749,17 +745,17 @@ class mqttSubsystem:
             
     def _log(self, mqttc, userdata, level, string):
         """ Use for debugging MQTT Packets, disable for normal use, NOISY. """
-        #_LOGGER.info('MQTT Log - ' + str(level) + ': ' + str(string))
+        # _LOGGER.info('MQTT Log - {}: {}'.format(str(level), str(string)))
         pass
             
     def _subscribe(self, mqttc, userdata, mid, granted_qos):
         """ Callback for Subscribe message. Unused currently. """
-        #_LOGGER.info("MQTT Subscribed Succesfully for Message ID: " + str(mid) + " - QoS: " + str(granted_qos))
+        # _LOGGER.info("MQTT Subscribed Succesfully for Message ID: {} - QoS: {}".format(str(mid), str(granted_qos)))
         pass
 
     def _publish(self, mqttc, userdata, mid):
         """ Callback for publish message. Unused currently. """
-        #_LOGGER.info("MQTT Published message ID: " + str(mid))
+        # _LOGGER.info("MQTT Published message ID: {}".format(str(mid)))
         pass
         
     def start(self):
@@ -767,15 +763,15 @@ class mqttSubsystem:
         The client start method. Starts the thread for the MQTT Client
         and publishes the connected message.
         """
-        _LOGGER.info('Connecting to MQTT... ' + self._server + ':' + self._port)
+        _LOGGER.info('Connecting to MQTT... {}:{}'.format(self._server, self._port))
         try:
             self._mqttc.connect(str(self._server), int(self._port), 10)
             self._mqttc.loop_start()
-            self._mqttc.publish(self.topicOutput,json.dumps({"connected": {}}), retain=True)
+            self._mqttc.publish(self.topicOutput, json.dumps({"connected": {}}), retain=True)
         except Exception as ex:
-            template = "An exception of type {0} occured. Arguments:\n{1!r}"
+            template = "An exception of type {0} occurred. Arguments:\n{1!r}"
             message = template.format(type(ex).__name__, ex.args)
-            _LOGGER.error("MQTT Connection error: " + message)
+            _LOGGER.error("MQTT Connection error: {}".format(message))
         
     def stop(self):
         """
@@ -783,12 +779,13 @@ class mqttSubsystem:
         stop the thread and disconnect. Publish the disconnected 
         message if clean shutdown.
         """
-        if (self.connected):
-            _LOGGER.info('Disconnecting from MQTT... ' + self._server + ':' + self._port)
+        if self.connected:
+            _LOGGER.info('Disconnecting from MQTT... {}:{}'.format(self._server, self._port))
             self._mqttc.publish(self.topicOutput,json.dumps({"disconnected": {}}), retain=True)
             self._mqttc.loop_stop()
             self._mqttc.disconnect()
-   
+
+
 def random_string(length):
     """ Generate a random string of uppercase, lowercase, and digits """
     library = string.ascii_uppercase + string.ascii_lowercase + string.digits
