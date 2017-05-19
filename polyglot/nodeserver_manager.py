@@ -1,16 +1,13 @@
-''' The element management module for Polyglot '''
-
+''' NodeServer Manager Module for Polyglot '''
 from collections import OrderedDict
 import copy
 import json
 import logging
 import os
 from polyglot import SOURCE_DIR
-from polyglot.utils import AsyncFileReader, Queue, Empty, MyProcessLookupError
+from polyglot.utils import AsyncFileReader, Queue, Empty, MyProcessLookupError, random_string
 from polyglot.version import PGVERSION
 import polyglot.nodeserver_helpers as helpers
-import random
-import string
 import subprocess
 import sys
 import threading
@@ -35,13 +32,15 @@ NSLOCK = threading.Lock()
 NSMGR = None
 NSSTATS = {}
 
-# Increment this version number each time a breaking change is made or a
-# major new message (feature) is added to the API between the node server
-# manager (implemented by this source file) and its clients.
-# This allows the client an opportunity to adjust its behavior to suit the
-# installed version of Polyglot -- keep in mind that the client node server
-# is independent of Polyglot, and may not even be implemented in Python --
-# and thus has no other way to know about the Polyglot server itself.
+"""
+Increment this version number each time a breaking change is made or a
+major new message (feature) is added to the API between the node server
+manager (implemented by this source file) and its clients.
+This allows the client an opportunity to adjust its behavior to suit the
+installed version of Polyglot -- keep in mind that the client node server
+is independent of Polyglot, and may not even be implemented in Python --
+and thus has no other way to know about the Polyglot server itself.
+"""
 PGAPIVER = '1'
 
 
@@ -801,9 +800,3 @@ class mqttSubsystem:
             self._mqttc.publish(self.topicOutput,json.dumps({"disconnected": {}}), retain=True)
             self._mqttc.loop_stop()
             self._mqttc.disconnect()
-
-
-def random_string(length):
-    """ Generate a random string of uppercase, lowercase, and digits """
-    library = string.ascii_uppercase + string.ascii_lowercase + string.digits
-    return ''.join(random.choice(library) for _ in range(length))

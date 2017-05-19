@@ -4,6 +4,8 @@
 
 import sys
 import threading
+import random
+import string
 
 # Uniform Queue and Empty locations b/w Python 2 and 3
 try:
@@ -59,3 +61,9 @@ class LockQueue(Queue):
         """ Put item into queue without waiting """
         if not self.locked:
             Queue.put_nowait(self, *args, **kwargs)
+
+
+def random_string(length):
+    """ Generate a random string of uppercase, lowercase, and digits """
+    library = string.ascii_uppercase + string.ascii_lowercase + string.digits
+    return ''.join(random.choice(library) for _ in range(length))

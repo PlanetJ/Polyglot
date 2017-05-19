@@ -1265,8 +1265,8 @@ class PolyglotConnector(object):
         Disconnects from Polyglot. Blocks the thread until IO stream is clear
         """
         if self.connected:
-            #self._outq.locked = True
-            #self._errq.locked = True
+            # self._outq.locked = True
+            # self._errq.locked = True
             self._outq.join()
             self._errq.join()
             self._threads = {}
@@ -1283,7 +1283,7 @@ class PolyglotConnector(object):
         Reads custom config file and presents it to node server as nodeserver_config
         """
         if YAML:
-            if self.configfile == None:
+            if self.configfile is None:
                 self.smsg('**INFO: No custom "configfile" found in server.json. '
                           'Trying the default of config.yaml.')
                 self.configfile = 'config.yaml'
