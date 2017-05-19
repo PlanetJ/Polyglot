@@ -1,4 +1,4 @@
-''' Polyglot ISY Virtual Node API definition '''
+""" Polyglot ISY Virtual Node API definition """
 # pylint: disable=no-name-in-module, import-error
 import logging
 from polyglot.element_manager import http
@@ -46,7 +46,7 @@ STATS = {'ntotal':  0,     # Total requests
 
 
 def load(pglot, user_config):
-    ''' setup the http server '''
+    """ setup the http server """
     # setup the configuration
     config = dict(DEFAULT_CONFIG)
     config.update(user_config)
@@ -61,9 +61,8 @@ def load(pglot, user_config):
     _LOGGER.info('Loaded ISY element')
     
 
-
 def unload():
-    ''' stops the http server '''
+    """ stops the http server """
     _LOGGER.info('Unloaded ISY element')
 
 
@@ -92,19 +91,21 @@ def set_config(config):
     # Fetch the version number using the new configuration
     VERSION = get_version()
 
+
 def add_node_prefix(ns_profnum, nid):
-    '''
+    """
     Adds a node prefix to a node ID.
 
+    :param ns_profnum: The Node Server ID
     :param nid: The nodes ID to which a prefix will be added.
-    '''
+    """
     prefix = 'n{}_'.format(str(ns_profnum).zfill(3))
     return '{}{}'.format(prefix, nid)
 
 
 def report_node_status(ns_profnum, node_address, driver_control, value, uom,
                        timeout=None, seq=None):
-    '''
+    """
     Reports the node status to the ISY.
 
     :param ns_profnum: Node Server ID
@@ -114,7 +115,7 @@ def report_node_status(ns_profnum, node_address, driver_control, value, uom,
     :param uom: The units of measurement of the value
     :param timeout: optional, timeout in seconds
     :param seq: optional, sequence number for reporting callback
-    '''
+    """
     node_address = add_node_prefix(ns_profnum, node_address)
     url = make_url(ns_profnum, ['nodes', node_address, 'report', 'status',
                                 driver_control, value, uom])
@@ -123,7 +124,7 @@ def report_node_status(ns_profnum, node_address, driver_control, value, uom,
 
 def report_command(ns_profnum, node_address, command, value=None, uom=None,
                    timeout=None, seq=None, **kwargs):
-    '''
+    """
     Reports a command that has run on a node.
 
     :param ns_profnum: Node Server ID
@@ -134,7 +135,7 @@ def report_command(ns_profnum, node_address, command, value=None, uom=None,
     :param optional <pN>.<uomN>: Named parameter (p) with specificed uom
     :param timeout: optional, timeout in seconds
     :param seq: optional, sequence number for reporting callback
-    '''
+    """
     node_address = add_node_prefix(ns_profnum, node_address)
     url = make_url(ns_profnum, ['nodes', node_address, 'report', 'cmd',
                                 command, value, uom],
@@ -144,7 +145,7 @@ def report_command(ns_profnum, node_address, command, value=None, uom=None,
 
 def node_add(ns_profnum, node_address, node_def_id, primary, name,
              timeout=None, seq=None):
-    '''
+    """
     Adds a node to the ISY.
 
     :param ns_profnum: Node Server ID
@@ -154,7 +155,7 @@ def node_add(ns_profnum, node_address, node_def_id, primary, name,
     :param name: The node name
     :param timeout: optional, timeout in seconds
     :param seq: optional, sequence number for reporting callback
-    '''
+    """
     node_address = add_node_prefix(ns_profnum, node_address)
     primary = add_node_prefix(ns_profnum, primary)
     url = make_url(ns_profnum, ['nodes', node_address, 'add', node_def_id],
@@ -164,7 +165,7 @@ def node_add(ns_profnum, node_address, node_def_id, primary, name,
 
 def node_change(ns_profnum, node_address, node_def_id,
                 timeout=None, seq=None):
-    '''
+    """
     Change node on the ISY.
 
     :param ns_profnum: Node Server ID
@@ -172,21 +173,21 @@ def node_change(ns_profnum, node_address, node_def_id,
     :param node_def_id: The node definition ID
     :param timeout: optional, timeout in seconds
     :param seq: optional, sequence number for reporting callback
-    '''
+    """
     node_address = add_node_prefix(ns_profnum, node_address)
     url = make_url(ns_profnum, ['nodes', node_address, 'change', node_def_id])
     return request(ns_profnum, url, timeout, seq)
 
 
 def node_remove(ns_profnum, node_address, timeout=None, seq=None):
-    '''
+    """
     Remove node on the ISY.
 
     :param ns_profnum: Node Server ID
     :param node_address: The Node Address
     :param timeout: optional, timeout in seconds
     :param seq: optional, sequence number for reporting callback
-    '''
+    """
     node_address = add_node_prefix(ns_profnum, node_address)
     url = make_url(ns_profnum, ['nodes', node_address, 'remove'])
     return request(ns_profnum, url, timeout, seq)
@@ -194,18 +195,20 @@ def node_remove(ns_profnum, node_address, timeout=None, seq=None):
 
 def report_request_status(ns_profnum, request_id, success,
                           timeout=None, seq=None):
-    '''
+    """
     Report the status of a request back to the ISY.
 
+    :param ns_profnum: The Node Server ID
     :param request_id: The request ID from the controller.
-    :param result: Boolean indicating the success of the command.
+    :param success: Boolean indicating the success of the command.
     :param timeout: optional, timeout in seconds
     :param seq: optional, sequence number for reporting callback
-    '''
+    """
     status = 'success' if success else 'failed'
     url = make_url(ns_profnum,
                    ['report', 'request', request_id, status])
     return request(ns_profnum, url, timeout, seq)
+
 
 def get_version():
     """
@@ -220,19 +223,20 @@ def get_version():
             ver = tree.findall('app_version')[0].text
             if ver is None:
                 ver = '0.0.0'
-            _LOGGER.info("ISY: firmware version: %s", ver)
+            _LOGGER.info("ISY: firmware version: {}".format(ver))
         except ET.ParseError:
             _LOGGER.error("No version information found on ISY.")
     return ver
 
+
 def make_url(ns_profnum, path, path_args=None):
-    '''
+    """
     Create a URL from the given path.
 
     :param ns_profnum: Node Server ID
     :param path: List or subdirectories in path.
     :param path_args: Dictionary of arguments to add to the path.
-    '''
+    """
     url = '{}://{}:{}/rest/ns/{}/'.format(HTTPS, ADDRESS, PORT, ns_profnum)
     url += '/'.join([quote(str(item)) for item in path if item is not None])
 
@@ -242,8 +246,9 @@ def make_url(ns_profnum, path, path_args=None):
 
     return url
 
+
 def restcall(ns_profnum, api, timeout=None, seq=None, noretry=False):
-    '''
+    """
     Requests a REST API from the ISY. Returns response.
 
     :param ns_profnum: Node Server ID
@@ -251,14 +256,15 @@ def restcall(ns_profnum, api, timeout=None, seq=None, noretry=False):
     :param timeout: optional, timeout in seconds
     :param seq: optional, sequence number for reporting callback
     :param noretry: optional, True to disable retry attempts
-    '''
+    """
 
     url = '{}://{}:{}/rest/{}'.format(HTTPS, ADDRESS, PORT, api)
     return request(ns_profnum, url, timeout, seq, text_needed=True)
 
+
 def request(ns_profnum, url, timeout=None, seq=None, text_needed=False,
             noretry=False):
-    '''
+    """
     Requests a URL from the ISY, returns response.
 
     :param ns_profnum: Node Server ID
@@ -277,9 +283,9 @@ def request(ns_profnum, url, timeout=None, seq=None, text_needed=False,
             values < 100 are connection errors,
             values > 99 are standard HTTP status codes,
             value of 200 = success
-    '''
+    """
     global SESSION
-    _LOGGER.debug('ISY: Request: %s', url)
+    _LOGGER.debug('ISY: Request: {}'.format(url))
 
     # check environment for special overrides
     no_sessions = ('PG_NOSESSIONS' in os.environ)
@@ -321,7 +327,7 @@ def request(ns_profnum, url, timeout=None, seq=None, text_needed=False,
         try:
             if no_sessions:
                 # send request, new connection each time 
-               req = requests.get(url, timeout=tmo, verify=False,
+                req = requests.get(url, timeout=tmo, verify=False,
                                    auth=(USERNAME, PASSWORD))
             else:
                 # get, check, and possibly update the session (thread-safe)
@@ -349,25 +355,25 @@ def request(ns_profnum, url, timeout=None, seq=None, text_needed=False,
                 text = req.text
 
         except requests.Timeout:
-            # Timeout is not retryable
+            # Timeout is not retry-able
             elapsed = (time.time() - ts)
             diag = 'Timeout'
             scode = 1
 
         except requests.HTTPError:
-            # Generic HTTP error is not retryable
+            # Generic HTTP error is not retry-able
             elapsed = (time.time() - ts)
             diag = 'HTTP Error'
             scode = 2
 
         except requests.URLRequired:
-            # Internal error?  Not retryable
+            # Internal error?  Not retry-able
             elapsed = (time.time() - ts)
             diag = 'Valid URL Required'
             scode = 3
 
         except requests.ConnectionError as err:
-            # Connection error - retryable, reset session
+            # Connection error - retry-able, reset session
             elapsed = (time.time() - ts)
             text = repr(err)
             diag = repr(err).replace('\n', ' ')
@@ -382,13 +388,13 @@ def request(ns_profnum, url, timeout=None, seq=None, text_needed=False,
             retry = False
 
         # Log at the correct level depending on the status code
-        logstr = 'ISY: [%d] (%5.2f) %3d %s: %s'
+        logstr = 'ISY: [{}] ({:.2f}) {:3d} {}: {}'
         if scode == 200:
-            _LOGGER.info(logstr, retries, elapsed, scode, diag, url)
+            _LOGGER.info(logstr.format(retries, elapsed, scode, diag, url))
         elif retry:
-            _LOGGER.warning(logstr, retries, elapsed, scode, diag, url)
+            _LOGGER.warning(logstr.format(retries, elapsed, scode, diag, url))
         else:
-            _LOGGER.error(logstr, retries, elapsed, scode, diag, url)
+            _LOGGER.error(logstr.format(retries, elapsed, scode, diag, url))
 
     # End of loop
 
@@ -421,6 +427,7 @@ def request(ns_profnum, url, timeout=None, seq=None, text_needed=False,
 def get_stats(ns_profnum, clear=False, **kwargs):
     """"
     Returns and optionally clears the Polyglot-to-ISY stats
+
     :param ns_profnum: Node Server ID (for future use)
     :param clear: optional, zero out stats if True
     """
@@ -436,5 +443,5 @@ def get_stats(ns_profnum, clear=False, **kwargs):
         STATS['ethigh']  = 0.0
         STATS['etlow']   = 0.0
     SLOCK.release()
-    #_LOGGER.info('get_stats(): %d %f %d', st['ntotal'], st['ettotal'], st['rtotal'])
+    # _LOGGER.info('get_stats(): %d %f %d', st['ntotal'], st['ettotal'], st['rtotal'])
     return st

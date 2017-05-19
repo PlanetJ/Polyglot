@@ -42,8 +42,8 @@ except ImportError:
 # no control over what version of Polyglot the end user is running.
 NS_API_VERSION = 1
 
-_POLYGLOT_CONNECTION = None
 OUTPUT_DELAY = 0
+
 
 def auto_request_report(fun):
     """
@@ -60,9 +60,8 @@ def auto_request_report(fun):
         request_id = kwargs.get('request_id', None)
         success = fun(*args, **kwargs)
 
-        if request_id and _POLYGLOT_CONNECTION is not None:
-            _POLYGLOT_CONNECTION.report_request_status(request_id,
-                                                       bool(success))
+        if request_id and PolyglotConnector.instance is not None:
+            PolyglotConnector.instance.report_request_status(request_id, bool(success))
         return success
     return auto_request_report_wrapper
 
@@ -1165,24 +1164,31 @@ class PolyglotConnector(object):
     """
     # pylint: disable=too-many-instance-attributes
 
+    """ Commands that may be invoked by Polyglot """
     commands = ['config', 'install', 'query', 'status', 'add_all', 'added',
                 'removed', 'renamed', 'enabled', 'disabled', 'cmd', 'ping',
                 'exit', 'params', 'result', 'statistics']
-    """ Commands that may be invoked by Polyglot """
-    logger = None
+
     """
     logger is initialized after the node server wait_for_config completes
     by the setup_log method and the log file is located in the node servers
     sandbox.
     Once wait_for_config is complete, you can call
-    `poly.logger.info('This variable is set to %s', variable)`
+    `poly.logger.info('This variable is set to {}'.format(variable))`
     """
+    logger = None
+
+    """
+    instance is global to all instances of PolyglotConnector we check
+    to make sure there is only one instance of this class.
+    """
+    instance = None
 
     def __init__(self):
         # make singleton
         # pylint: disable=global-statement
-        global _POLYGLOT_CONNECTION
-        if _POLYGLOT_CONNECTION is not None:
+        # global _POLYGLOT_CONNECTION
+        if self.instance is not None:
             raise RuntimeError('PolyglotConnector may only be created once.')
 
         # setup properties
@@ -1197,6 +1203,8 @@ class PolyglotConnector(object):
         self.sandbox = False
         self.configfile = None
         self.path = None
+        self.pgver = None
+        self.pgapiver = None
         self.nodeserver_config = None
         self.name = False
         self.apiver = False
@@ -1214,7 +1222,7 @@ class PolyglotConnector(object):
         handler.setFormatter(logging.Formatter(fmt))
 
         # store connection globally in module
-        _POLYGLOT_CONNECTION = self
+        self.instance = self
 
     @property
     def uptime(self):
@@ -1288,24 +1296,24 @@ class PolyglotConnector(object):
                           'Trying the default of config.yaml.')
                 self.configfile = 'config.yaml'
             else:
-                self.smsg('**INFO: Custom config file option found in server.json: \
-                    {}'.format(self.configfile))
+                self.smsg('**INFO: Custom config file option found in server.json: {}'.format(self.configfile))
             try:
                 with open(os.path.join(self.path, self.configfile), 'r') as cfg:
                     self.nodeserver_config = yaml.safe_load(cfg)
-                    self.smsg('**INFO: {} - Config file loaded as dictionary to \
-                        "poly.nodeserver_config"'.format(self.configfile))
+                    self.smsg('**INFO: {} - Config file loaded as dictionary to '
+                              '"poly.nodeserver_config"'.format(self.configfile))
             except yaml.YAMLError, exc:
                 if hasattr(exc, 'problem_mark'):
                     mark = exc.problem_mark
-                    self.smsg('**ERROR: Error in config file. Position: (Line: \
-                        {}: Column: {})'.format(mark.line+1, mark.column+1))
+                    self.smsg('**ERROR: Error in config file. Position: (Line: '
+                              '{}: Column: {})'.format(mark.line + 1, mark.column + 1))
                     self.smsg('{} - '.format(exc))
             except IOError as e:
-                self.smsg('**INFO: No config file found, or it is unreadable. This is normal \
-                    if your nodeserver doesn\'t need a config file.')
-        else: self.smsg('**ERROR: PyYAML module not installed... skipping custom config sections. \
-            "sudo pip install pyyaml" to use')
+                self.smsg('**INFO: No config file found, or it is unreadable. This is normal '
+                          'if your nodeserver doesn\'t need a config file.')
+        else:
+            self.smsg('**ERROR: PyYAML module not installed... skipping custom config sections. '
+                      '"sudo pip install pyyaml" to use')
 
     def write_nodeserver_config(self, default_flow_style=False, indent=4):
         """
@@ -1324,16 +1332,15 @@ class PolyglotConnector(object):
                 with open(os.path.join(self.path, self.configfile), 'r') as read:
                     existing = yaml.safe_load(read)
                     if existing == self.nodeserver_config:
-                        self.smsg('**INFO: NodeServer configuration file matches running \
-                            config... Skipping write.')
+                        self.smsg('**INFO: NodeServer configuration file matches running config... Skipping write.')
                         return True
             except yaml.YAMLError as e:
                 # the saved config file is bad, report the error and fix it
                 self.logger.error('**ERROR: write_nodeserver_config: {}'.format(e))
                 # return False
-            except IOError as e:
+            except IOError:
                 # the saved config file may not exist, ignore open/read error and write one
-                #self.smsg('**ERROR: write_nodeserver_config: Could not read to nodeserver config file {}' +
+                # self.smsg('**ERROR: write_nodeserver_config: Could not read to nodeserver config file {}' +
                 #          ' error={}).format(
                 #         self.configfile,
                 #         e ))
@@ -1348,9 +1355,12 @@ class PolyglotConnector(object):
                 self.logger.error('**ERROR: write_nodeserver_config: {}'.format(e))
                 return False
             except IOError:
-                self.smsg('**ERROR: write_nodeserver_config: Could not write to nodeserver config file {}'.format(self.configfile))
+                self.smsg('**ERROR: write_nodeserver_config: Could not write to nodeserver config file {}'
+                          .format(self.configfile))
                 return False
-        else: self.smsg('**ERROR: PyYAML module not installed... skipping custom config sections. "sudo pip install pyyaml" to use')
+        else: 
+            self.smsg('**ERROR: PyYAML module not installed... skipping custom config sections. '
+                      '"sudo pip install pyyaml" to use')
         return True
 
     # manage output
@@ -1392,8 +1402,7 @@ class PolyglotConnector(object):
             try:
                 cmd = json.loads(cmd)
             except ValueError:
-                self.send_error('Received badly formatted command ' +
-                                '(not json): {}'.format(cmd))
+                self.send_error('Received badly formatted command (not json): {}'.format(cmd))
                 return False
 
             # split command
@@ -1401,8 +1410,7 @@ class PolyglotConnector(object):
                 cmd_code = list(cmd.keys())[0]
                 args = cmd[cmd_code]
             except (KeyError, IndexError):
-                self.send_error('Received badly formatted command: {} '
-                                .format(cmd))
+                self.send_error('Received badly formatted command: {} '.format(cmd))
                 return False
 
             # validate command
@@ -1418,7 +1426,7 @@ class PolyglotConnector(object):
         """
         Handle command was received.
 
-        :param cmd: The command that has been received
+        :param cmd_code: The command that has been received
         :param data: Dictionary of received data
         """
         # pylint: disable=broad-except
@@ -1460,21 +1468,20 @@ class PolyglotConnector(object):
         self.path = kwargs['path']
         return True
 
-    def setup_log(self, sandbox, name):
+    @staticmethod
+    def setup_log(sandbox, name):
         # Setup logger for individual nodeservers, log to
         # /config/<nodeserver-name>
-        self.log_filename = sandbox + "/" + name + ".log"
+        log_filename = sandbox + "/" + name + ".log"
         # Could be "DEBUG", "WARNING", or "INFO"
         log_level = logging.DEBUG
         logger = logging.getLogger(name)
         logger.setLevel(log_level)
         # Make a handler that writes to a file,
         # making a new file at midnight, and keeping 30 backups
-        handler = logging.handlers.TimedRotatingFileHandler(
-            self.log_filename, when="midnight", backupCount=30)
+        handler = logging.handlers.TimedRotatingFileHandler(log_filename, when="midnight", backupCount=30)
         # Format each log message like this
-        formatter = logging.Formatter(
-            '%(asctime)s %(levelname)-8s %(name)s %(message)s')
+        formatter = logging.Formatter('%(asctime)s %(levelname)-8s %(name)s %(message)s')
         # Attach the formatter to the handler
         handler.setFormatter(formatter)
         # Attach the handler to the logger
@@ -1500,13 +1507,13 @@ class PolyglotConnector(object):
         """
         self._errq.put(err_str.replace('\n', ''), True, 5)
 
-    def smsg(self, str):
+    def smsg(self, msg):
         """
         Logs/sends a diagnostic/debug, informative, or error message.
         Individual node servers can override this method if they desire to
         redirect or filter these messages.
         """
-        self.send_error(str)
+        self.send_error(msg)
 
     def send_config(self, config_data):
         """
@@ -1729,3 +1736,8 @@ class PolyglotConnector(object):
 
         self._handlers[event].append(handler)
         return True
+
+    def process_thread_exception(self, fname):
+        exc_type, exc_value = sys.exc_info()[:2]
+        self.logger.error('Handling {} exception in {} with message "{}" in {}'
+                          .format(exc_type.__name__, fname, exc_value, threading.current_thread().name))
