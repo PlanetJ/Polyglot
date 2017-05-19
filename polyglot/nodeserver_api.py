@@ -94,10 +94,9 @@ class Node(object):
         self.primary = primary
         self._drivers = copy.deepcopy(self._drivers)
         manifest = manifest.get(address, {}) if manifest else {}
-        new_node = manifest == {}
+        # new_node = manifest == {}
         if not hasattr(parent, '_is_node_server'):
-            raise RuntimeError('Error: node "%s", parent "%s" is not a NodeServer.'
-                               % (name, parent))
+            raise RuntimeError('Error: node "{}", parent "{}" is not a NodeServer.'.format(name, parent))
         self.added = manifest.get('added', False)
         self.enabled = manifest.get('enabled', False)
         self.name = manifest.get('name', name)
@@ -112,14 +111,13 @@ class Node(object):
 
         self.add_node()
 
-
-    def smsg(self, strng):
+    def smsg(self, msg):
         """
         Logs/sends a diagnostic/debug, informative, or error message.
         Individual node servers can override this method if they desire to
         redirect or filter these messages.
         """
-        self.parent.smsg(strng)
+        self.parent.smsg(msg)
 
     def run_cmd(self, command, **kwargs):
         """
@@ -196,7 +194,7 @@ class Node(object):
 
     def _report_driver_cb(self, driver, status_code, **kwargs):
         """
-        Private method - updates ISY syncronization flag based on
+        Private method - updates ISY synchronization flag based on
         the success/fail of the status update API call to the ISY.
         """
 
@@ -246,11 +244,11 @@ class Node(object):
 
         :returns boolean: Indicates success or failure of node addition
         """
-        if (int(len(self.address)) > 14):
+        if int(len(self.address)) > 14:
             self.smsg(
                 '**ERROR: name too long (>14), will fail when adding on ISY): "{}"'
                 .format(self.address))
-        self.smsg('**DEBUG: node "%s": parent="%s"' % (self.name, self.parent))
+        self.smsg('**DEBUG: node "{}": parent="{}"'.format(self.name, self.parent))
         self.parent.add_node(self)
         self.report_driver()
         return True
@@ -328,7 +326,6 @@ class Node(object):
                 manifest['drivers'][key] = val[0]
 
         return manifest
-
 
     _isy_synced = {}
     """
@@ -746,6 +743,7 @@ class SimpleNodeServer(NodeServer):
     can access this directly, but the prefered method is by using get_node or
     exist_node methods.
     """
+
     @auto_request_report
     def add_node(self, node):
         """
@@ -765,7 +763,7 @@ class SimpleNodeServer(NodeServer):
             if node.primary is not True:
                 # A primary node must be its own primary because ISY only
                 # supports one level deep.
-                if not node.primary.primary is True:
+                if not node.primary.primary:
                     raise RuntimeError('Error: node "%s", primary "%s" is not primary.'
                                        % (node.name, node.primary.name))
                 primary_addr = node.primary.address
@@ -1358,7 +1356,7 @@ class PolyglotConnector(object):
                 self.smsg('**ERROR: write_nodeserver_config: Could not write to nodeserver config file {}'
                           .format(self.configfile))
                 return False
-        else: 
+        else:
             self.smsg('**ERROR: PyYAML module not installed... skipping custom config sections. '
                       '"sudo pip install pyyaml" to use')
         return True
