@@ -44,6 +44,7 @@ NSSTATS = {}
 # and thus has no other way to know about the Polyglot server itself.
 PGAPIVER = '1'
 
+
 class NodeServerManager(object):
     """
     Node Server Manager
@@ -326,6 +327,12 @@ class NodeServer(object):
         _LOGGER.info('Started Node Server: {}:{} ({})'
                      .format(self.platform, self.name, self._proc.pid))
 
+    @staticmethod
+    def process_thread_exception(fname):
+        exc_type, exc_value = sys.exc_info()[:2]
+        _LOGGER.error('Handling {} exception in {} with message "{}" in {}'
+                      .format(exc_type.__name__, fname, exc_value, threading.current_thread().name))
+
     def restart(self):
         """ restart the nodeserver """
         self.send_exit()
@@ -402,164 +409,174 @@ class NodeServer(object):
         Write pending input to node server.
         Kill process if unresponsive.
         """
-        if self._mqtt is None:
-            while True and self._inq:
-                try:
-                    # try to get a line from the queue
-                    line = self._inq.get(True, 5)
-                except Empty:
-                    # no line in queue, check if the Node Server is responding
-                    if not self.responding:
-                        _LOGGER.error(
-                            'Node Server {} has stopped responding.'.format(self.name))
-                        self._inq = None
-                        self._rqq = None
-                        self._proc.kill()
-                else:
+        try:
+            if self._mqtt is None:
+                while True and self._inq:
                     try:
-                        # found line, try to write it
-                        self._proc.stdin.write('{}\n'.format(line))
-                        self._proc.stdin.flush()
-                    except IOError:
-                        # stdin pipe is broken. process is likely dead.
-                        _LOGGER.error(
-                            'Node Server {} has exited unexpectedly.'.format(self.name))
-                        self._inq = None
-                        self._rqq = None
-                        self._proc.kill()
+                        # try to get a line from the queue
+                        line = self._inq.get(True, 5)
+                    except Empty:
+                        # no line in queue, check if the Node Server is responding
+                        if not self.responding:
+                            _LOGGER.error(
+                                'Node Server {} has stopped responding.'.format(self.name))
+                            self._inq = None
+                            self._rqq = None
+                            self._proc.kill()
                     else:
-                        # line wrote successfully
-                        _LOGGER.debug('{} STDIN: {}'.format(self.name, line))
-                        if self._inq:
-                            self._inq.task_done()
-                time.sleep(.1)
-        else:
-            if self.node_connected:
-                while True and self._mqtt:
-                    if not self.responding:
-                        _LOGGER.error(
-                            'Node Server {} has stopped responding.'.format(self.name))
-                        self._rqq = None
-                        self._mqtt.stop()
-                        self._mqtt = None
-                        self._proc.kill()
+                        try:
+                            # found line, try to write it
+                            self._proc.stdin.write('{}\n'.format(line))
+                            self._proc.stdin.flush()
+                        except IOError:
+                            # stdin pipe is broken. process is likely dead.
+                            _LOGGER.error(
+                                'Node Server {} has exited unexpectedly.'.format(self.name))
+                            self._inq = None
+                            self._rqq = None
+                            self._proc.kill()
+                        else:
+                            # line wrote successfully
+                            _LOGGER.debug('{}: STDIN: {}'.format(self.name, line))
+                            if self._inq:
+                                self._inq.task_done()
                     time.sleep(.1)
+            else:
+                if self.node_connected:
+                    while True and self._mqtt:
+                        if not self.responding:
+                            _LOGGER.error(
+                                'Node Server {} has stopped responding.'.format(self.name))
+                            self._rqq = None
+                            self._mqtt.stop()
+                            self._mqtt = None
+                            self._proc.kill()
+                        time.sleep(.1)
+        except:
+            self.process_thread_exception('_send_in')
 
     def _request_handler(self):
         """
         Read and process network requests for a node server
         """
-        while True and self._rqq:
-            msg = self._rqq.get(True)
-            # parse message
-            command = list(msg.keys())[0]
-            arguments = msg[command]
+        try:
+            while True and self._rqq:
+                msg = self._rqq.get(True)
+                # parse message
+                command = list(msg.keys())[0]
+                arguments = msg[command]
 
-            seq = arguments.get('seq', None)
-            ts = time.time()
-            _LOGGER.debug('{:8s} [{}] ({:5.2f}) _request_handler: command={} seq={}'
-                          .format(self.name,
-                                  (0 if self._rqq is None else self._rqq.qsize()),
-                                  0.0, command, ('' if seq is None else seq)))
+                seq = arguments.get('seq', None)
+                ts = time.time()
+                _LOGGER.debug('{}: [{}] ({:.2f}) _request_handler: command={} seq={}'
+                              .format(self.name,
+                                      (0 if self._rqq is None else self._rqq.qsize()),
+                                      0.0, command, ('' if seq is None else seq)))
 
-            fun = self._handlers.get(command)
-            if fun:
-                result = fun(self.profile_number, **arguments)
-                if seq and result:
-                    self._mk_cmd('result', **result)
+                fun = self._handlers.get(command)
+                if fun:
+                    result = fun(self.profile_number, **arguments)
+                    if seq and result:
+                        self._mk_cmd('result', **result)
 
-            # Signal that this is handled
-            if self._rqq:
-                self._rqq.task_done()
+                # Signal that this is handled
+                if self._rqq:
+                    self._rqq.task_done()
 
-            _LOGGER.debug('{:8s} [{}] ({:5.2f}) _request_handler: completed.'
-                          .format(self.name, (0 if self._rqq is None else self._rqq.qsize()), (time.time() - ts)))
-            time.sleep(.1)
+                _LOGGER.debug('{}: [{}] ({:.2f}) _request_handler: completed.'
+                              .format(self.name, (0 if self._rqq is None else self._rqq.qsize()), (time.time() - ts)))
+                time.sleep(.1)
+        except:
+            self.process_thread_exception('_request_handler')
 
     def _recv_out(self, line):
         """ 
         Process the output of the nodeserver 
         (Called from STDOUT or from message receive in MQTT) 
         """
-        nstype = 'STDOUT'
-        if self._mqtt is not None: nstype = 'MQTT'
-        l = (line[:57] + '...') if len(line) > 60 else line
-        _LOGGER.debug('{:8s} [{}] ({:5.2f}) {}: {}'
-                      .format(self.name, (0 if self._rqq is None else self._rqq.qsize()), 0.0, nstype, l))
-        ts = time.time()
-        # parse message
-        message = json.loads(line)
-        command = list(message.keys())[0]
-        arguments = message[command]
+        try:
+            nstype = 'STDOUT'
+            if self._mqtt is not None:
+                nstype = 'MQTT'
+            # l = (line[:57] + '...') if len(line) > 60 else line
+            _LOGGER.debug('{}: [{}] ({:.2f}) {}: {}'
+                          .format(self.name, (0 if self._rqq is None else self._rqq.qsize()), 0.0, nstype, line))
+            ts = time.time()
+            # parse message
+            message = json.loads(line)
+            command = list(message.keys())[0]
+            arguments = message[command]
 
-        # direct command
-        if command == 'pong':
-            # store pong time
-            self._lastpong = time.time()
-        elif command == 'config':
-            # store new configuration in config file
-            self.config = arguments
-            self.pglot.update_config()
-        elif command == 'install':
-            # install node server on isy
-            # [future] implement when documentation is available
-            raise NotImplementedError('Install command is not yet supported.')
-        elif command == 'manager':
-            global NSLOCK, NSMGR, NSSTATS
-            # Special management node server operations
-            op = arguments.get('op', None)
-            if op == 'IAmManager':
-                NSLOCK.acquire()
-                NSMGR = self.profile_number
-                NSSTATS['manager'] = NSMGR
-                NSLOCK.release()
-            elif op == 'ClearStatistics':
-                if self.profile_number == NSMGR:
-                    _LOGGER.info('{:8s} manager request: ClearStatistics'.format(self.name))
-                    isy = self.pglot.elements.isy
-                    isy.get_stats(self.profile_number, clear=True)
+            # direct command
+            if command == 'pong':
+                # store pong time
+                self._lastpong = time.time()
+            elif command == 'config':
+                # store new configuration in config file
+                self.config = arguments
+                self.pglot.update_config()
+            elif command == 'install':
+                # install node server on isy
+                # [future] implement when documentation is available
+                raise NotImplementedError('Install command is not yet supported.')
+            elif command == 'manager':
+                global NSLOCK, NSMGR, NSSTATS
+                # Special management node server operations
+                op = arguments.get('op', None)
+                if op == 'IAmManager':
+                    NSLOCK.acquire()
+                    NSMGR = self.profile_number
+                    NSSTATS['manager'] = NSMGR
+                    NSLOCK.release()
+                elif op == 'ClearStatistics':
+                    if self.profile_number == NSMGR:
+                        _LOGGER.info('{} manager request: ClearStatistics'.format(self.name))
+                        isy = self.pglot.elements.isy
+                        isy.get_stats(self.profile_number, clear=True)
+                    else:
+                        _LOGGER.info('{} manager request refused: {}'.format(self.name, op))
+                elif op == 'IsyHasRestarted':
+                    if self.profile_number == NSMGR:
+                        # [TODO] send restart message to all other node server queues
+                        _LOGGER.info('{} reports that ISY has restarted'.format(self.name))
+                    else:
+                        _LOGGER.info('{} manager request refused: {}'.format(self.name, op))
                 else:
-                    _LOGGER.info('{:8s} manager request refused: {}'.format(self.name, op))
-            elif op == 'IsyHasRestarted':
+                    _LOGGER.error('{} manager op not implemented: {}'.format(self.name, op))
+            elif command == 'statistics':
+                # manage Polyglot and network communications stats
+                isy = self.pglot.elements.isy
+                result = {'to_isy': isy.get_stats(self.profile_number, **arguments)}
                 if self.profile_number == NSMGR:
-                    # [TODO] send restart message to all other node server queues
-                    _LOGGER.info('{:8s} reports that ISY has restarted'.format(self.name))
-                else:
-                    _LOGGER.info('{:8s} manager request refused: {}'.format(self.name, op))
-            else:
-                _LOGGER.error('{:8s} manager op not implemented: {}'.format(self.name, op))
-        elif command == 'statistics':
-            # manage Polyglot and network communications stats
-            isy = self.pglot.elements.isy
-            result = {'to_isy': isy.get_stats(self.profile_number, **arguments)}
-            if self.profile_number == NSMGR:
-                # TODO: may need to take NSLOCK here to avoid partial updates
-                result['ns'] = NSSTATS
-            self._mk_cmd('statistics', **result)
-        elif command == 'exit':
-            # node server is done. Kill it. Clean up is automatic.
-            self.node_connected = False
-            self._proc.kill()
-            self._inq = None
-            self._rqq = None
-        elif command == 'connected':
-            _LOGGER.info('{:8s} current status is connected to the broker.'.format(self.name))
-            self.node_connected = True
-            self.send_ping()
-        elif command == 'disconnected':
-            _LOGGER.error('{:8s} current status is disconnected from the broker.'.format(self.name))
-            self.node_connected = False
+                    # TODO: may need to take NSLOCK here to avoid partial updates
+                    result['ns'] = NSSTATS
+                self._mk_cmd('statistics', **result)
+            elif command == 'exit':
+                # node server is done. Kill it. Clean up is automatic.
+                self.node_connected = False
+                self._proc.kill()
+                self._inq = None
+                self._rqq = None
+            elif command == 'connected':
+                _LOGGER.info('{} current status is connected to the broker.'.format(self.name))
+                self.node_connected = True
+                self.send_ping()
+            elif command == 'disconnected':
+                _LOGGER.error('{} current status is disconnected from the broker.'.format(self.name))
+                self.node_connected = False
 
-        else:
-            fun = self._handlers.get(command)
-            if fun and self._rqq:
-                self._rqq.put(message, True)
             else:
-                _LOGGER.error('Node Server {} delivered bad command {}'
-                              .format(self.name, command))
-        _LOGGER.debug('{:8s} [{}] ({:5.2f})   Done: {}'
-                      .format(self.name, (0 if self._rqq is None else self._rqq.qsize()), (time.time() - ts), l))
-        time.sleep(.1)
+                fun = self._handlers.get(command)
+                if fun and self._rqq:
+                    self._rqq.put(message, True)
+                else:
+                    _LOGGER.error('Node Server {} delivered bad command {}'
+                                  .format(self.name, command))
+            _LOGGER.debug('{}: [{}] ({:.2f})   Done: {}'
+                          .format(self.name, (0 if self._rqq is None else self._rqq.qsize()), (time.time() - ts), line))
+            time.sleep(.1)
+        except:
+            self.process_thread_exception('_recv_out')
 
     def _recv_err(self, line):
         """
